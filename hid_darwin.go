@@ -240,13 +240,13 @@ func Devices() <-chan *DeviceInfo {
 	return result
 }
 
-func ByPath(path string) *DeviceInfo {
+func ByPath(path string) (*DeviceInfo, error) {
 	for d := range Devices() {
 		if d.Path == path {
-			return d
+			return d, nil
 		}
 	}
-	return nil
+	return nil, errors.New("Device not found")
 }
 
 func (di *DeviceInfo) Open() (Device, error) {
