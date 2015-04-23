@@ -259,7 +259,7 @@ func (di *DeviceInfo) Open() (Device, error) {
 				C.CFRetain(C.CFTypeRef(device))
 				dev = &osxDevice{osDevice: device}
 				err = nil
-				C.IOHIDDeviceRegisterRemovalCallback(device, (*[0]byte)(unsafe.Pointer(C.deviceUnpluged)), unsafe.Pointer(dev))
+				C.IOHIDDeviceRegisterRemovalCallback(device, (C.IOHIDCallback)(unsafe.Pointer(C.deviceUnpluged)), unsafe.Pointer(dev))
 			} else {
 				err = ioReturnToErr(res)
 			}
