@@ -28,6 +28,67 @@ const (
 	ERROR_NO_MEM        usbError = C.LIBUSB_ERROR_NO_MEM
 	ERROR_NOT_SUPPORTED usbError = C.LIBUSB_ERROR_NOT_SUPPORTED
 	ERROR_OTHER         usbError = C.LIBUSB_ERROR_OTHER
+
+	// Request types to use in ControlTransfer().
+	REQUEST_TYPE_STANDARD = (0x00 << 5)
+	REQUEST_TYPE_CLASS    = (0x01 << 5)
+	REQUEST_TYPE_VENDOR   = (0x02 << 5)
+	REQUEST_TYPE_RESERVED = (0x03 << 5)
+
+	// Recipient bits for the reqType of ControlTransfer(). Values 4 - 31
+	// are reserved.
+	RECIPIENT_DEVICE    = 0x00
+	RECIPIENT_INTERFACE = 0x01
+	RECIPIENT_ENDPOINT  = 0x02
+	RECIPIENT_OTHER     = 0x03
+
+	// in: device-to-host
+	ENDPOINT_IN = 0x80
+
+	// out: host-to-device
+	ENDPOINT_OUT = 0x00
+
+	// Descriptor types as defined by the USB specification.
+	DT_DEVICE    = 0x01
+	DT_CONFIG    = 0x02
+	DT_STRING    = 0x03
+	DT_INTERFACE = 0x04
+	DT_ENDPOINT  = 0x05
+	DT_HID       = 0x21
+	DT_REPORT    = 0x22
+	DT_PHYSICAL  = 0x23
+	DT_HUB       = 0x29
+
+	// Standard request types, as defined in table 9-3 of the USB2 specifications
+	REQUEST_GET_STATUS    = 0x00
+	REQUEST_CLEAR_FEATURE = 0x01
+
+	// Set or enable a specific feature
+	REQUEST_SET_FEATURE = 0x03
+
+	// Set device address for all future accesses
+	REQUEST_SET_ADDRESS = 0x05
+
+	// Get the specified descriptor
+	REQUEST_GET_DESCRIPTOR = 0x06
+
+	// Used to update existing descriptors or add new descriptors
+	REQUEST_SET_DESCRIPTOR = 0x07
+
+	// Get the current device configuration value
+	REQUEST_GET_CONFIGURATION = 0x08
+
+	// Set device configuration
+	REQUEST_SET_CONFIGURATION = 0x09
+
+	// Return the selected alternate setting for the specified interface.
+	REQUEST_GET_INTERFACE = 0x0A
+
+	// Select an alternate interface for the specified interface
+	REQUEST_SET_INTERFACE = 0x0B
+
+	// Set then report an endpoint's synchronization frame
+	REQUEST_SYNCH_FRAME = 0x0C
 )
 
 var usbErrorString = map[usbError]string{

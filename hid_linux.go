@@ -9,16 +9,18 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"syscall"
 	"unsafe"
 )
 
 type linuxDevice struct {
-	handle int
+	handle C.libusb_device_handle
+	info   DeviceInfo
 }
 
 func Init() {
 	C.libusb_init(nil)
+
+	// TODO : C.libusb_exit()
 }
 
 func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
@@ -76,33 +78,53 @@ func ByPath(path string) (*DeviceInfo, error) {
 }
 
 func (di *DeviceInfo) Open() (Device, error) {
-	handle, err := syscall.Open(di.Path, syscall.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
+	dev := &linuxDevice{
+		info:   *di,
+		handle: *C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId)),
 	}
-
-	if handle > 0 {
-		return &linuxDevice{handle}, nil
-	} else {
-		return nil, errors.New("unable to open file")
-	}
+	return dev, nil
 }
 
 func (dev *linuxDevice) Close() {
-	syscall.Close(dev.handle)
+
+}
+
+func (dev *linuxDevice) ControlTransfer(reqType, req byte, value, index uint16, data []byte, timeout int) error {
+	var ptr *byte
+	if len(data) > 0 {
+		ptr = &data[0]
+	}
+	if len(data) > 0xffff {
+		return errors.New("data longer than 65535 bytes, means overflow")
+	}
+	err := usbError(C.libusb_control_transfer(&dev.handle,
+		C.uint8_t(reqType), C.uint8_t(req), C.uint16_t(value), C.uint16_t(index),
+		(*C.uchar)(ptr), C.uint16_t(len(data)), C.uint(timeout)))
+	return errors.New(err.Error())
 }
 
 func (dev *linuxDevice) WriteFeature(data []byte) error {
+	dev.ControlTransfer(
+		ENDPOINT_OUT|REQUEST_TYPE_STANDARD|RECIPIENT_INTERFACE,
+		REQUEST_SET_FEATURE,
+		DT_REPORT,
+		0,
+		data,
+		1000)
+	//req_type := C.LIBUSB_ENDPOINT_IN | C.LIBUSB_REQUEST_TYPE_STANDARD | C.LIBUSB_RECIPIENT_INTERFACE
+	//C.libusb_control_transfer(&dev.handle,
+	//C.uint8_t(req_type),
+	//C.uint8_t(C.LIBUSB_REQUEST_GET_DESCRIPTOR),
+	//C.uint16_t(C.LIBUSB_DT_REPORT<<8),
+	//C.uint16_t(0),
+	//(*C.uchar)(&data[0]),
+	// C.uint16_t(len(data)),
+	//C.uint(1000),
+	//)
+
 	return errors.New("not yet implemented")
 }
 
 func (dev *linuxDevice) Write(data []byte) error {
-	n, err := syscall.Write(dev.handle, data)
-	if err != nil {
-		return err
-	}
-	if n != len(data) {
-		return errors.New("written bytes missmatch!")
-	}
-	return err
+	return nil
 }
