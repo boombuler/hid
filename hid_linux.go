@@ -17,46 +17,6 @@ type linuxDevice struct {
 	handle int
 }
 
-type usbError C.int
-
-func (e usbError) Error() string {
-	return fmt.Sprintf("libusb: %s [code %d]", usbErrorString[e], int(e))
-}
-
-const (
-	SUCCESS             usbError = C.LIBUSB_SUCCESS
-	ERROR_IO            usbError = C.LIBUSB_ERROR_IO
-	ERROR_INVALID_PARAM usbError = C.LIBUSB_ERROR_INVALID_PARAM
-	ERROR_ACCESS        usbError = C.LIBUSB_ERROR_ACCESS
-	ERROR_NO_DEVICE     usbError = C.LIBUSB_ERROR_NO_DEVICE
-	ERROR_NOT_FOUND     usbError = C.LIBUSB_ERROR_NOT_FOUND
-	ERROR_BUSY          usbError = C.LIBUSB_ERROR_BUSY
-	ERROR_TIMEOUT       usbError = C.LIBUSB_ERROR_TIMEOUT
-	ERROR_OVERFLOW      usbError = C.LIBUSB_ERROR_OVERFLOW
-	ERROR_PIPE          usbError = C.LIBUSB_ERROR_PIPE
-	ERROR_INTERRUPTED   usbError = C.LIBUSB_ERROR_INTERRUPTED
-	ERROR_NO_MEM        usbError = C.LIBUSB_ERROR_NO_MEM
-	ERROR_NOT_SUPPORTED usbError = C.LIBUSB_ERROR_NOT_SUPPORTED
-	ERROR_OTHER         usbError = C.LIBUSB_ERROR_OTHER
-)
-
-var usbErrorString = map[usbError]string{
-	C.LIBUSB_SUCCESS:             "success",
-	C.LIBUSB_ERROR_IO:            "i/o error",
-	C.LIBUSB_ERROR_INVALID_PARAM: "invalid param",
-	C.LIBUSB_ERROR_ACCESS:        "bad access",
-	C.LIBUSB_ERROR_NO_DEVICE:     "no device",
-	C.LIBUSB_ERROR_NOT_FOUND:     "not found",
-	C.LIBUSB_ERROR_BUSY:          "device or resource busy",
-	C.LIBUSB_ERROR_TIMEOUT:       "timeout",
-	C.LIBUSB_ERROR_OVERFLOW:      "overflow",
-	C.LIBUSB_ERROR_PIPE:          "pipe error",
-	C.LIBUSB_ERROR_INTERRUPTED:   "interrupted",
-	C.LIBUSB_ERROR_NO_MEM:        "out of memory",
-	C.LIBUSB_ERROR_NOT_SUPPORTED: "not supported",
-	C.LIBUSB_ERROR_OTHER:         "unknown error",
-}
-
 func Init() {
 	C.libusb_init(nil)
 }
@@ -80,18 +40,18 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 func Devices() <-chan *DeviceInfo {
 	result := make(chan *DeviceInfo)
 	go func() {
-		var c_devlist **C.libusb_device
-		cnt := C.libusb_get_device_list(nil, &c_devlist)
-		defer C.libusb_free_device_list(c_devlist, 1)
+		var devices **C.libusb_device
+		cnt := C.libusb_get_device_list(nil, &devices)
+		defer C.libusb_free_device_list(devices, 1)
 
-		var dev_list []*C.libusb_device
-		*(*reflect.SliceHeader)(unsafe.Pointer(&dev_list)) = reflect.SliceHeader{
-			Data: uintptr(unsafe.Pointer(c_devlist)),
+		var device_list []*C.libusb_device
+		*(*reflect.SliceHeader)(unsafe.Pointer(&device_list)) = reflect.SliceHeader{
+			Data: uintptr(unsafe.Pointer(devices)),
 			Len:  int(cnt),
 			Cap:  int(cnt),
 		}
 
-		for _, dev := range dev_list {
+		for _, dev := range device_list {
 			di, err := newDeviceInfo(dev)
 			if err != nil {
 				fmt.Printf("ERROR: %s\n", err)
@@ -133,10 +93,6 @@ func (dev *linuxDevice) Close() {
 }
 
 func (dev *linuxDevice) WriteFeature(data []byte) error {
-	//_, _, errorp := syscall.Syscall(syscall.SYS_IOCTL,
-	//		uintptr(dev.handle),
-	//		uintptr(C.makeHidIoCSFeature(C.int(len(data)))),
-	//		uintptr(unsafe.Pointer(&data[0])))
 	return errors.New("not yet implemented")
 }
 
