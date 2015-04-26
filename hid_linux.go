@@ -8,23 +8,21 @@ package hid
 #include <locale.h>
 
 static inline int makeHidIoCSFeature(int len) {
-  return HIDIOCSFEATURE(len)
+  return HIDIOCSFEATURE(len);
 }
 
 */
-
 import "C"
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"syscall"
 	"unsafe"
 )
 
 func init() {
-	C.setlocale(LC_CTYPE, nil)
+	C.setlocale(C.LC_CTYPE, nil)
 }
 
 type linuxDevice struct {
@@ -68,7 +66,7 @@ func (dev *linuxDevice) Close() {
 func (dev *linuxDevice) WriteFeature(data []byte) error {
 	_, _, errorp := syscall.Syscall(syscall.SYS_IOCTL,
 		uintptr(dev.handle),
-		uintptr(C.makeHidIoCSFeature(len(data))),
+		uintptr(C.makeHidIoCSFeature(C.int(len(data)))),
 		uintptr(unsafe.Pointer(&data[0])))
 	return os.NewSyscallError("ioctl", errorp)
 }
@@ -81,4 +79,5 @@ func (dev *linuxDevice) Write(data []byte) error {
 	if n != len(data) {
 		return errors.New("written bytes missmatch!")
 	}
+	return err
 }
