@@ -28,7 +28,7 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 	if errno := C.libusb_get_device_descriptor(dev, &desc); errno < 0 {
 		return nil, usbError(errno)
 	}
-
+	// todo: check if libusb_get_string_descriptor can be used to get manufacturer
 	return &DeviceInfo{
 		Path:          "",
 		VendorId:      uint16(desc.idVendor),
@@ -78,6 +78,8 @@ func ByPath(path string) (*DeviceInfo, error) {
 }
 
 func (di *DeviceInfo) Open() (Device, error) {
+	// todo: use another mechanism, cause vid/pid isn't uniqqu for multiple devices
+	// maybe libusb_get_port_numbers can be sused as path
 	dev := &linuxDevice{
 		info:   *di,
 		handle: *C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId)),
