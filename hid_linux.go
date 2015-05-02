@@ -104,7 +104,7 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 	const index = 0
 	const timeout = 1000
 
-	C.libusb_control_transfer(dev.handle,
+	err := C.libusb_control_transfer(dev.handle,
 		C.uint8_t(ENDPOINT_OUT|REQUEST_TYPE_CLASS|RECIPIENT_DEVICE),
 		C.uint8_t(HID_SET_REPORT),
 		C.uint16_t(reportId),
@@ -113,7 +113,7 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 		C.uint16_t(len(data)),
 		C.uint(timeout))
 
-	return nil
+	return usbError(err)
 }
 
 func (dev *linuxDevice) Write(data []byte) error {
