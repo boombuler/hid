@@ -2,7 +2,6 @@ package hid
 
 // #cgo pkg-config: libusb-1.0
 // #cgo LDFLAGS: -lusb-1.0
-// #cgo LDFLAGS: -w
 // #include <libusb-1.0/libusb.h>
 import "C"
 
@@ -15,13 +14,11 @@ import (
 
 type linuxDevice struct {
 	handle *C.libusb_device_handle
-	info   DeviceInfo
+	info   *DeviceInfo
 }
 
 func Init() {
 	C.libusb_init(nil)
-
-	// TODO : C.libusb_exit()
 }
 
 func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
@@ -79,37 +76,32 @@ func ByPath(path string) (*DeviceInfo, error) {
 }
 
 func (di *DeviceInfo) Open() (Device, error) {
-
-	// C.libusb_set_debug(nil, C.LIBUSB_LOG_LEVEL_DEBUG)
-
 	// todo: use another mechanism, cause vid/pid isn't uniqqu for multiple devices
 	// maybe libusb_get_port_numbers can be sused as path
 	dev := &linuxDevice{
-		info:   *di,
+		info:   di,
 		handle: C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId)),
 	}
 	return dev, nil
 }
 
 func (dev *linuxDevice) Close() {
-	C.libusb.exit(nil)
+	C.libusb_exit(nil)
 }
 
 func (dev *linuxDevice) WriteFeature(data []byte) error {
 	if dev.handle == nil {
-		return errors.New("No usb device found.")
+		return errors.New("No USB device opend before.")
 	}
 	if len(data) > 0xffff {
-		return errors.New("data longer than 65535 bytes, means overflow")
+		return errors.New("data longer than 65535 bytes, means overflow, isn't supported")
 	}
-	var dataPtr *C.uchar
-	if len(data) > 0 {
-		//dataPtr = (*C.uchar)(&data[0])
-		dataPtr = (*C.uchar)(unsafe.Pointer(&data[0]))
+	if len(data) == 0 {
+		return nil
 	}
 
-	const reportId = uint16(1)
-	const index = uint16(0)
+	const reportId = 1
+	const index = 0
 	const timeout = 1000
 
 	C.libusb_control_transfer(dev.handle,
@@ -117,11 +109,11 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 		C.uint8_t(HID_SET_REPORT),
 		C.uint16_t(reportId),
 		C.uint16_t(index),
-		dataPtr,
+		(*C.uchar)(&data[0]),
 		C.uint16_t(len(data)),
 		C.uint(timeout))
 
-	return errors.New("not yet implemented")
+	return nil
 }
 
 func (dev *linuxDevice) Write(data []byte) error {
