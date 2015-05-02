@@ -89,6 +89,16 @@ const (
 
 	// Set then report an endpoint's synchronization frame
 	REQUEST_SYNCH_FRAME = 0x0C
+
+	HID_GET_REPORT          = 0x01
+	HID_GET_IDLE            = 0x02
+	HID_GET_PROTOCOL        = 0x03
+	HID_SET_REPORT          = 0x09
+	HID_SET_IDLE            = 0x0A
+	HID_SET_PROTOCOL        = 0x0B
+	HID_REPORT_TYPE_INPUT   = 0x01
+	HID_REPORT_TYPE_OUTPUT  = 0x02
+	HID_REPORT_TYPE_FEATURE = 0x03
 )
 
 var usbErrorString = map[usbError]string{

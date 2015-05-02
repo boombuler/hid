@@ -2,6 +2,7 @@ package hid
 
 // #cgo pkg-config: libusb-1.0
 // #cgo LDFLAGS: -lusb-1.0
+// #cgo LDFLAGS: -w
 // #include <libusb-1.0/libusb.h>
 import "C"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type linuxDevice struct {
-	handle C.libusb_device_handle
+	handle *C.libusb_device_handle
 	info   DeviceInfo
 }
 
@@ -78,51 +79,47 @@ func ByPath(path string) (*DeviceInfo, error) {
 }
 
 func (di *DeviceInfo) Open() (Device, error) {
+
+	// C.libusb_set_debug(nil, C.LIBUSB_LOG_LEVEL_DEBUG)
+
 	// todo: use another mechanism, cause vid/pid isn't uniqqu for multiple devices
 	// maybe libusb_get_port_numbers can be sused as path
 	dev := &linuxDevice{
 		info:   *di,
-		handle: *C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId)),
+		handle: C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId)),
 	}
 	return dev, nil
 }
 
 func (dev *linuxDevice) Close() {
-
+	C.libusb.exit(nil)
 }
 
-func (dev *linuxDevice) ControlTransfer(reqType, req byte, value, index uint16, data []byte, timeout int) error {
-	var ptr *byte
-	if len(data) > 0 {
-		ptr = &data[0]
+func (dev *linuxDevice) WriteFeature(data []byte) error {
+	if dev.handle == nil {
+		return errors.New("No usb device found.")
 	}
 	if len(data) > 0xffff {
 		return errors.New("data longer than 65535 bytes, means overflow")
 	}
-	err := usbError(C.libusb_control_transfer(&dev.handle,
-		C.uint8_t(reqType), C.uint8_t(req), C.uint16_t(value), C.uint16_t(index),
-		(*C.uchar)(ptr), C.uint16_t(len(data)), C.uint(timeout)))
-	return errors.New(err.Error())
-}
+	var dataPtr *C.uchar
+	if len(data) > 0 {
+		//dataPtr = (*C.uchar)(&data[0])
+		dataPtr = (*C.uchar)(unsafe.Pointer(&data[0]))
+	}
 
-func (dev *linuxDevice) WriteFeature(data []byte) error {
-	dev.ControlTransfer(
-		ENDPOINT_OUT|REQUEST_TYPE_STANDARD|RECIPIENT_INTERFACE,
-		REQUEST_SET_FEATURE,
-		DT_REPORT,
-		0,
-		data,
-		1000)
-	//req_type := C.LIBUSB_ENDPOINT_IN | C.LIBUSB_REQUEST_TYPE_STANDARD | C.LIBUSB_RECIPIENT_INTERFACE
-	//C.libusb_control_transfer(&dev.handle,
-	//C.uint8_t(req_type),
-	//C.uint8_t(C.LIBUSB_REQUEST_GET_DESCRIPTOR),
-	//C.uint16_t(C.LIBUSB_DT_REPORT<<8),
-	//C.uint16_t(0),
-	//(*C.uchar)(&data[0]),
-	// C.uint16_t(len(data)),
-	//C.uint(1000),
-	//)
+	const reportId = uint16(1)
+	const index = uint16(0)
+	const timeout = 1000
+
+	C.libusb_control_transfer(dev.handle,
+		C.uint8_t(ENDPOINT_OUT|REQUEST_TYPE_CLASS|RECIPIENT_DEVICE),
+		C.uint8_t(HID_SET_REPORT),
+		C.uint16_t(reportId),
+		C.uint16_t(index),
+		dataPtr,
+		C.uint16_t(len(data)),
+		C.uint(timeout))
 
 	return errors.New("not yet implemented")
 }
