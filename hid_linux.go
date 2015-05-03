@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"unicode/utf16"
 	"unsafe"
 )
@@ -120,7 +121,7 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 	}
 	manufacturer, product, _ := resolveDescriptors(dev, desc.iManufacturer, desc.iProduct)
 	return &DeviceInfo{
-		Path:          "",
+		Path:          getPath(dev, desc.idVendor, desc.idProduct),
 		VendorId:      uint16(desc.idVendor),
 		ProductId:     uint16(desc.idProduct),
 		VersionNumber: uint16(desc.bcdDevice),
@@ -161,4 +162,24 @@ func getStringDescriptor(dev *C.libusb_device_handle, id C.uint8_t) (string, err
 		uni16[i] = uint16(b[i*2]) | uint16(b[i*2+1])<<8
 	}
 	return string(utf16.Decode(uni16)), nil
+}
+
+func getPath(dev *C.libusb_device, vendorId C.uint16_t, productId C.uint16_t) string {
+	numbers, _ := getPortNumbers(dev)
+	path := fmt.Sprintf("%.4x:%.4x:%s", vendorId, productId, numbers)
+	return path
+}
+
+func getPortNumbers(dev *C.libusb_device) (string, error) {
+	const maxlen = 7 // As per the USB 3.0 specs, the current maximum limit for the depth is 7
+	var numarr [maxlen]C.uint8_t
+	len := C.libusb_get_port_numbers(dev, &numarr[0], maxlen)
+	if len < 0 || len > maxlen {
+		return "", usbError(len)
+	}
+	var numstr []string = make([]string, len)
+	for i := 0; i < int(len); i++ {
+		numstr[i] = fmt.Sprintf("%.2x", numarr[i])
+	}
+	return strings.Join(numstr, "."), nil
 }
