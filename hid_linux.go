@@ -17,7 +17,7 @@ type linuxDevice struct {
 	info   *DeviceInfo
 }
 
-func Init() {
+func init() {
 	C.libusb_init(nil)
 }
 
@@ -40,8 +40,12 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 func Devices() <-chan *DeviceInfo {
 	result := make(chan *DeviceInfo)
 	go func() {
-		var devices **C.libusb_device
+		var devices **C.struct_libusb_device
 		cnt := C.libusb_get_device_list(nil, &devices)
+		if cnt < 0 {
+			close(result)
+			return
+		}
 		defer C.libusb_free_device_list(devices, 1)
 
 		var device_list []*C.libusb_device
@@ -58,7 +62,6 @@ func Devices() <-chan *DeviceInfo {
 				continue
 			}
 			result <- di
-
 		}
 
 		close(result)
@@ -117,5 +120,5 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 }
 
 func (dev *linuxDevice) Write(data []byte) error {
-	return nil
+	return errors.New("not yet implemented")
 }
