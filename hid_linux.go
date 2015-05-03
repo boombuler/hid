@@ -111,6 +111,7 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 }
 
 func (dev *linuxDevice) Write(data []byte) error {
+	// TODO what is the diffeence to WriteFeature() ???
 	return errors.New("not yet implemented")
 }
 
