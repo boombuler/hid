@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"unicode/utf16"
 	"unsafe"
 )
 
@@ -19,22 +20,6 @@ type linuxDevice struct {
 
 func init() {
 	C.libusb_init(nil)
-}
-
-func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
-	var desc C.struct_libusb_device_descriptor
-	if errno := C.libusb_get_device_descriptor(dev, &desc); errno < 0 {
-		return nil, usbError(errno)
-	}
-	// todo: check if libusb_get_string_descriptor can be used to get manufacturer
-	return &DeviceInfo{
-		Path:          "",
-		VendorId:      uint16(desc.idVendor),
-		ProductId:     uint16(desc.idProduct),
-		VersionNumber: uint16(desc.bcdDevice),
-		Manufacturer:  "",
-		Product:       "",
-	}, nil
 }
 
 func Devices() <-chan *DeviceInfo {
@@ -89,6 +74,11 @@ func (di *DeviceInfo) Open() (Device, error) {
 }
 
 func (dev *linuxDevice) Close() {
+	if dev.handle != nil {
+		C.libusb_close(dev.handle)
+	}
+	dev.handle = nil
+	dev.info = nil
 	C.libusb_exit(nil)
 }
 
@@ -121,4 +111,54 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 
 func (dev *linuxDevice) Write(data []byte) error {
 	return errors.New("not yet implemented")
+}
+
+func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
+	var desc C.struct_libusb_device_descriptor
+	if err := C.libusb_get_device_descriptor(dev, &desc); err < 0 {
+		return nil, usbError(err)
+	}
+	manufacturer, product, _ := resolveDescriptors(dev, desc.iManufacturer, desc.iProduct)
+	return &DeviceInfo{
+		Path:          "",
+		VendorId:      uint16(desc.idVendor),
+		ProductId:     uint16(desc.idProduct),
+		VersionNumber: uint16(desc.bcdDevice),
+		Manufacturer:  manufacturer,
+		Product:       product,
+	}, nil
+}
+
+func resolveDescriptors(dev *C.libusb_device, iManufacturer C.uint8_t, iProduct C.uint8_t) (manufacturer string, product string, e error) {
+	var handle *C.libusb_device_handle
+	err := C.libusb_open(dev, &handle)
+	defer C.libusb_close(handle)
+	if err != 0 {
+		return "", "", usbError(err)
+	}
+	manufacturerStr, _ := getStringDescriptor(handle, iManufacturer)
+	productStr, _ := getStringDescriptor(handle, iProduct)
+	return manufacturerStr, productStr, nil
+}
+
+func getStringDescriptor(dev *C.libusb_device_handle, id C.uint8_t) (string, error) {
+	var buf [128]C.char
+	const langId = 0
+	err := C.libusb_get_string_descriptor(dev, id, C.uint16_t(langId), (*C.uchar)(unsafe.Pointer(&buf[0])), C.int(len(buf)))
+	if err < 0 {
+		return "", usbError(err)
+	}
+	if err < 2 {
+		return "", errors.New("not enough data for USB string descriptor")
+	}
+	l := C.int(buf[0])
+	if l > err {
+		return "", errors.New("USB string descriptor is too short")
+	}
+	b := buf[2:l]
+	uni16 := make([]uint16, len(b)/2)
+	for i := range uni16 {
+		uni16[i] = uint16(b[i*2]) | uint16(b[i*2+1])<<8
+	}
+	return string(utf16.Decode(uni16)), nil
 }
