@@ -67,9 +67,14 @@ func ByPath(path string) (*DeviceInfo, error) {
 func (di *DeviceInfo) Open() (Device, error) {
 	// todo: use another mechanism, cause vid/pid isn't uniqqu for multiple devices
 	// maybe libusb_get_port_numbers can be sused as path
+	var h *C.libusb_device_handle
+	h = C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId))
+	if h == nil {
+		return nil, errors.New(fmt.Sprintf("Couldn't open USB device vendor=%4x product=%4x", di.VendorId, di.ProductId))
+	}
 	dev := &linuxDevice{
 		info:   di,
-		handle: C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId)),
+		handle: h,
 	}
 	return dev, nil
 }
@@ -77,13 +82,12 @@ func (di *DeviceInfo) Open() (Device, error) {
 func (dev *linuxDevice) Close() {
 	if dev.handle != nil {
 		C.libusb_close(dev.handle)
+		dev.handle = nil
+		dev.info = nil
 	}
-	dev.handle = nil
-	dev.info = nil
-	C.libusb_exit(nil)
 }
 
-func (dev *linuxDevice) WriteFeature(data []byte) error {
+func (dev *linuxDevice) writeReport(hid_report_type int, data []byte) error {
 	if dev.handle == nil {
 		return errors.New("No USB device opend before.")
 	}
@@ -98,8 +102,8 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 	const index = 0
 	const timeout = 1000
 
-	err := C.libusb_control_transfer(dev.handle,
-		C.uint8_t(ENDPOINT_OUT|REQUEST_TYPE_CLASS|RECIPIENT_DEVICE),
+	written := C.libusb_control_transfer(dev.handle,
+		C.uint8_t(ENDPOINT_OUT|RECIPIENT_DEVICE|DT_REPORT|hid_report_type),
 		C.uint8_t(HID_SET_REPORT),
 		C.uint16_t(reportId),
 		C.uint16_t(index),
@@ -107,12 +111,18 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 		C.uint16_t(len(data)),
 		C.uint(timeout))
 
-	return usbError(err)
+	if int(written) == len(data) {
+		return nil
+	}
+	return usbError(written)
+}
+
+func (dev *linuxDevice) WriteFeature(data []byte) error {
+	return dev.writeReport(HID_REPORT_TYPE_FEATURE, data)
 }
 
 func (dev *linuxDevice) Write(data []byte) error {
-	// TODO what is the diffeence to WriteFeature() ???
-	return errors.New("not yet implemented")
+	return dev.writeReport(HID_REPORT_TYPE_OUTPUT, data)
 }
 
 func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
@@ -134,13 +144,17 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 func resolveDescriptors(dev *C.libusb_device, iManufacturer C.uint8_t, iProduct C.uint8_t) (manufacturer string, product string, e error) {
 	var handle *C.libusb_device_handle
 	err := C.libusb_open(dev, &handle)
-	defer C.libusb_close(handle)
-	if err != 0 {
-		return "", "", usbError(err)
+	if handle != nil {
+		defer C.libusb_close(handle)
+		if err != 0 {
+			return "", "", usbError(err)
+		}
+		manufacturerStr, _ := getStringDescriptor(handle, iManufacturer)
+		productStr, _ := getStringDescriptor(handle, iProduct)
+		return manufacturerStr, productStr, nil
 	}
-	manufacturerStr, _ := getStringDescriptor(handle, iManufacturer)
-	productStr, _ := getStringDescriptor(handle, iProduct)
-	return manufacturerStr, productStr, nil
+	return "", "", errors.New("Couldn't resolve description string")
+
 }
 
 func getStringDescriptor(dev *C.libusb_device_handle, id C.uint8_t) (string, error) {
