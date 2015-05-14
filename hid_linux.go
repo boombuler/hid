@@ -34,14 +34,7 @@ func Devices() <-chan *DeviceInfo {
 		}
 		defer C.libusb_free_device_list(devices, 1)
 
-		var device_list []*C.libusb_device
-		*(*reflect.SliceHeader)(unsafe.Pointer(&device_list)) = reflect.SliceHeader{
-			Data: uintptr(unsafe.Pointer(devices)),
-			Len:  int(cnt),
-			Cap:  int(cnt),
-		}
-
-		for _, dev := range device_list {
+		for _, dev := range asArray(devices, cnt) {
 			di, err := newDeviceInfo(dev)
 			if err != nil {
 				fmt.Printf("ERROR: %s\n", err)
@@ -65,18 +58,30 @@ func ByPath(path string) (*DeviceInfo, error) {
 }
 
 func (di *DeviceInfo) Open() (Device, error) {
-	// todo: use another mechanism, cause vid/pid isn't uniqqu for multiple devices
-	// maybe libusb_get_port_numbers can be sused as path
-	var h *C.libusb_device_handle
-	h = C.libusb_open_device_with_vid_pid(nil, C.uint16_t(di.VendorId), C.uint16_t(di.ProductId))
-	if h == nil {
-		return nil, errors.New(fmt.Sprintf("Couldn't open USB device vendor=%4x product=%4x", di.VendorId, di.ProductId))
+
+	var devices **C.struct_libusb_device
+	cnt := C.libusb_get_device_list(nil, &devices)
+	if cnt < 0 {
+		return nil, errors.New(fmt.Sprintf("Couldn't open USB device with path=%s, because couldn't enumerate USB devices.", di.Path))
 	}
-	dev := &linuxDevice{
-		info:   di,
-		handle: h,
+	defer C.libusb_free_device_list(devices, 1)
+
+	for _, dev := range asArray(devices, cnt) {
+		candidate, _ := newDeviceInfo(dev)
+		if di.Path == candidate.Path {
+			var handle *C.libusb_device_handle
+			err := C.libusb_open(dev, &handle)
+			if err != 0 {
+				return nil, usbError(err)
+			}
+			dev := &linuxDevice{
+				info:   candidate,
+				handle: handle,
+			}
+			return dev, nil
+		}
 	}
-	return dev, nil
+	return nil, errors.New(fmt.Sprintf("Couldn't open USB device vendor=%4x product=%4x", di.VendorId, di.ProductId))
 }
 
 func (dev *linuxDevice) Close() {
@@ -85,6 +90,16 @@ func (dev *linuxDevice) Close() {
 		dev.handle = nil
 		dev.info = nil
 	}
+}
+
+func asArray(devices **C.struct_libusb_device, cnt C.ssize_t) []*C.libusb_device {
+	var device_list []*C.libusb_device
+	*(*reflect.SliceHeader)(unsafe.Pointer(&device_list)) = reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(devices)),
+		Len:  int(cnt),
+		Cap:  int(cnt),
+	}
+	return device_list
 }
 
 func (dev *linuxDevice) writeReport(hid_report_type int, data []byte) error {
