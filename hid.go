@@ -28,10 +28,10 @@ type Device interface {
 	// Close closes the device and release all keept resources.
 	Close()
 	// Write to the device
-	// technically a HID report with type 'output' is written
+	// (technically a HID report with type 'output' is send to the device)
 	Write([]byte) error
 	// Write to the device
-	// technically a HID report with type 'feature' is written
+	// (technically a HID report with type 'feature' is send to the device)
 	WriteFeature([]byte) error
 }
 
