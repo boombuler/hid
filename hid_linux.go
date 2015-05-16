@@ -34,7 +34,7 @@ func Devices() <-chan *DeviceInfo {
 		}
 		defer C.libusb_free_device_list(devices, 1)
 
-		for _, dev := range asArray(devices, cnt) {
+		for _, dev := range asSlice(devices, cnt) {
 			di, err := newDeviceInfo(dev)
 			if err != nil {
 				fmt.Printf("ERROR: %s\n", err)
@@ -66,7 +66,7 @@ func (di *DeviceInfo) Open() (Device, error) {
 	}
 	defer C.libusb_free_device_list(devices, 1)
 
-	for _, dev := range asArray(devices, cnt) {
+	for _, dev := range asSlice(devices, cnt) {
 		candidate, _ := newDeviceInfo(dev)
 		if di.Path == candidate.Path {
 			var handle *C.libusb_device_handle
@@ -92,7 +92,7 @@ func (dev *linuxDevice) Close() {
 	}
 }
 
-func asArray(devices **C.struct_libusb_device, cnt C.ssize_t) []*C.libusb_device {
+func asSlice(devices **C.struct_libusb_device, cnt C.ssize_t) []*C.libusb_device {
 	var device_list []*C.libusb_device
 	*(*reflect.SliceHeader)(unsafe.Pointer(&device_list)) = reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(devices)),
