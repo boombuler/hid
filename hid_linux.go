@@ -67,7 +67,10 @@ func (di *DeviceInfo) Open() (Device, error) {
 	defer C.libusb_free_device_list(devices, 1)
 
 	for _, dev := range asSlice(devices, cnt) {
-		candidate, _ := newDeviceInfo(dev)
+		candidate, err := newDeviceInfo(dev)
+		if err != nil {
+			return nil, err
+		}
 		if di.Path == candidate.Path {
 			var handle *C.libusb_device_handle
 			err := C.libusb_open(dev, &handle)
@@ -90,16 +93,6 @@ func (dev *linuxDevice) Close() {
 		dev.handle = nil
 		dev.info = nil
 	}
-}
-
-func asSlice(devices **C.struct_libusb_device, cnt C.ssize_t) []*C.libusb_device {
-	var device_list []*C.libusb_device
-	*(*reflect.SliceHeader)(unsafe.Pointer(&device_list)) = reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(devices)),
-		Len:  int(cnt),
-		Cap:  int(cnt),
-	}
-	return device_list
 }
 
 func (dev *linuxDevice) writeReport(hid_report_type int, data []byte) error {
@@ -145,9 +138,19 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 	if err := C.libusb_get_device_descriptor(dev, &desc); err < 0 {
 		return nil, usbError(err)
 	}
-	manufacturer, product, _ := resolveDescriptors(dev, desc.iManufacturer, desc.iProduct)
+	manufacturer, product, err := resolveDescriptors(dev, desc.iManufacturer, desc.iProduct)
+	if err == usbError(C.LIBUSB_ERROR_ACCESS) {
+		manufacturer = "access not allowed"
+		product = "access not allowed"
+	} else if err != nil {
+		return nil, err
+	}
+	path, err := getPath(dev, desc.idVendor, desc.idProduct)
+	if err != nil {
+		return nil, err
+	}
 	return &DeviceInfo{
-		Path:          getPath(dev, desc.idVendor, desc.idProduct),
+		Path:          path,
 		VendorId:      uint16(desc.idVendor),
 		ProductId:     uint16(desc.idProduct),
 		VersionNumber: uint16(desc.bcdDevice),
@@ -159,13 +162,19 @@ func newDeviceInfo(dev *C.libusb_device) (*DeviceInfo, error) {
 func resolveDescriptors(dev *C.libusb_device, iManufacturer C.uint8_t, iProduct C.uint8_t) (manufacturer string, product string, e error) {
 	var handle *C.libusb_device_handle
 	err := C.libusb_open(dev, &handle)
+	if err != 0 {
+		return "", "", usbError(err)
+	}
 	if handle != nil {
 		defer C.libusb_close(handle)
-		if err != 0 {
-			return "", "", usbError(err)
+		manufacturerStr, err := getStringDescriptor(handle, iManufacturer)
+		if err != nil {
+			return "", "", err
 		}
-		manufacturerStr, _ := getStringDescriptor(handle, iManufacturer)
-		productStr, _ := getStringDescriptor(handle, iProduct)
+		productStr, err := getStringDescriptor(handle, iProduct)
+		if err != nil {
+			return "", "", err
+		}
 		return manufacturerStr, productStr, nil
 	}
 	return "", "", errors.New("Couldn't resolve description string")
@@ -194,10 +203,13 @@ func getStringDescriptor(dev *C.libusb_device_handle, id C.uint8_t) (string, err
 	return string(utf16.Decode(uni16)), nil
 }
 
-func getPath(dev *C.libusb_device, vendorId C.uint16_t, productId C.uint16_t) string {
-	numbers, _ := getPortNumbers(dev)
+func getPath(dev *C.libusb_device, vendorId C.uint16_t, productId C.uint16_t) (string, error) {
+	numbers, err := getPortNumbers(dev)
+	if err != nil {
+		return "", err
+	}
 	path := fmt.Sprintf("%.4x:%.4x:%s", vendorId, productId, numbers)
-	return path
+	return path, nil
 }
 
 func getPortNumbers(dev *C.libusb_device) (string, error) {
@@ -212,4 +224,14 @@ func getPortNumbers(dev *C.libusb_device) (string, error) {
 		numstr[i] = fmt.Sprintf("%.2x", numarr[i])
 	}
 	return strings.Join(numstr, "."), nil
+}
+
+func asSlice(devices **C.struct_libusb_device, cnt C.ssize_t) []*C.libusb_device {
+	var device_list []*C.libusb_device
+	*(*reflect.SliceHeader)(unsafe.Pointer(&device_list)) = reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(devices)),
+		Len:  int(cnt),
+		Cap:  int(cnt),
+	}
+	return device_list
 }
