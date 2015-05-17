@@ -9,9 +9,9 @@ The platform specific parts of this package are heavily based on
 The following operating systems are supported targets 
 (as used by [*$GOOS* environment variable](https://golang.org/doc/install/source#environment))
 
-* darwin
-* linux
-* windows
+* darwin (uses native IOKit framework)
+* linux (uses libusb 1.0+)
+* windows (uses native Windows HID library)
 
 ##### Known quirks for building on Windows 64bit
 
