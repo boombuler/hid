@@ -125,6 +125,30 @@ func (dev *linuxDevice) writeReport(hid_report_type int, data []byte) error {
 	return usbError(written)
 }
 
+func (dev *linuxDevice) WriteInterrupt(endpoint byte, data []byte) (int, error) {
+	if dev.handle == nil {
+		return 0, errors.New("No USB device opend before.")
+	}
+	if len(data) > 0xffff {
+		return 0, errors.New("data longer than 65535 bytes, means overflow, isn't supported")
+	}
+	if len(data) == 0 {
+		return 0, nil
+	}
+	const timeout = 1000
+	var transferred C.int
+	rval := C.libusb_interrupt_transfer(dev.handle,
+		C.uchar(endpoint),
+		(*C.uchar)(&data[0]),
+		C.int(len(data)),
+		&transferred,
+		C.uint(timeout))
+	if rval != 0 {
+		return 0, usbError(rval)
+	}
+	return int(transferred), nil
+}
+
 func (dev *linuxDevice) WriteFeature(data []byte) error {
 	return dev.writeReport(HID_REPORT_TYPE_FEATURE, data)
 }
