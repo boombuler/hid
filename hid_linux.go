@@ -33,11 +33,9 @@ func Devices() <-chan *DeviceInfo {
 			return
 		}
 		defer C.libusb_free_device_list(devices, 1)
-
 		for _, dev := range asSlice(devices, cnt) {
 			di, err := newDeviceInfo(dev)
 			if err != nil {
-				fmt.Printf("ERROR: %s\n", err)
 				continue
 			}
 			result <- di
@@ -69,7 +67,7 @@ func (di *DeviceInfo) Open() (Device, error) {
 	for _, dev := range asSlice(devices, cnt) {
 		candidate, err := newDeviceInfo(dev)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if di.Path == candidate.Path {
 			var handle *C.libusb_device_handle
