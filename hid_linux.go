@@ -133,14 +133,14 @@ func (dev *linuxDevice) WriteInterrupt(endpoint byte, data []byte) (int, error) 
 	if len(data) == 0 {
 		return 0, nil
 	}
-	const timeout = 1000
+	const timeout = 10000
 	var transferred C.int
 	rval := C.libusb_interrupt_transfer(dev.handle,
 		C.uchar(endpoint),
 		(*C.uchar)(&data[0]),
 		C.int(len(data)),
 		&transferred,
-		C.uint(timeout))
+		timeout)
 	if rval != 0 {
 		return 0, usbError(rval)
 	}
