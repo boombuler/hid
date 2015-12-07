@@ -78,6 +78,10 @@ func (d *winDevice) WriteFeature(data []byte) error {
 	}
 }
 
+func (d *winDevice) WriteInterrupt(endpoint byte, data []byte) (int, error) {
+	return 0, errors.New("WriteInterrupt is not implemented")
+}
+
 type callCFn func(buf unsafe.Pointer, bufSize *C.DWORD) unsafe.Pointer
 
 // simple helper function for this windows

@@ -33,11 +33,9 @@ func Devices() <-chan *DeviceInfo {
 			return
 		}
 		defer C.libusb_free_device_list(devices, 1)
-
 		for _, dev := range asSlice(devices, cnt) {
 			di, err := newDeviceInfo(dev)
 			if err != nil {
-				fmt.Printf("ERROR: %s\n", err)
 				continue
 			}
 			result <- di
@@ -69,7 +67,7 @@ func (di *DeviceInfo) Open() (Device, error) {
 	for _, dev := range asSlice(devices, cnt) {
 		candidate, err := newDeviceInfo(dev)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if di.Path == candidate.Path {
 			var handle *C.libusb_device_handle
@@ -123,6 +121,30 @@ func (dev *linuxDevice) writeReport(hid_report_type int, data []byte) error {
 		return nil
 	}
 	return usbError(written)
+}
+
+func (dev *linuxDevice) WriteInterrupt(endpoint byte, data []byte) (int, error) {
+	if dev.handle == nil {
+		return 0, errors.New("No USB device opend before.")
+	}
+	if len(data) > 0xffff {
+		return 0, errors.New("data longer than 65535 bytes, means overflow, isn't supported")
+	}
+	if len(data) == 0 {
+		return 0, nil
+	}
+	const timeout = 10000
+	var transferred C.int
+	rval := C.libusb_interrupt_transfer(dev.handle,
+		C.uchar(endpoint),
+		(*C.uchar)(&data[0]),
+		C.int(len(data)),
+		&transferred,
+		timeout)
+	if rval != 0 {
+		return 0, usbError(rval)
+	}
+	return int(transferred), nil
 }
 
 func (dev *linuxDevice) WriteFeature(data []byte) error {

@@ -322,3 +322,7 @@ func (dev *osxDevice) WriteFeature(data []byte) error {
 func (dev *osxDevice) Write(data []byte) error {
 	return dev.setReport(C.kIOHIDReportTypeOutput, data)
 }
+
+func (dev *osxDevice) WriteInterrupt(endpoint byte, data []byte) (int, error) {
+	return 0, errors.New("WriteInterrupt is not implemented")
+}

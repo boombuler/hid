@@ -33,6 +33,8 @@ type Device interface {
 	// Write to the device
 	// (technically a HID report with type 'feature' is send to the device)
 	WriteFeature([]byte) error
+	// Preform an interrupt transfer to the device
+	WriteInterrupt(byte, []byte) (int, error)
 }
 
 // FindDevices iterates through all devices with a given vendor and product id
