@@ -3,6 +3,8 @@
 // Signal 11 - HIDAPI. (https://github.com/signal11/hidapi)
 package hid
 
+import "strings"
+
 // DeviceInfo provides general information about a device
 type DeviceInfo struct {
 	// Path contains a Platform-specific device path which is used to identify the device
@@ -48,5 +50,20 @@ func FindDevices(vendor uint16, product uint16) <-chan *DeviceInfo {
 		}
 		close(result)
 	}()
+	return result
+}
+
+// FindDevicesByProduct iterates through all devices with a given vendor and product id
+func FindDevicesByProduct(product string) <-chan *DeviceInfo {
+	result := make(chan *DeviceInfo)
+
+	go func() {
+		for dev := range Devices() {
+			if strings.Contains(dev.Product, product)  {
+				result <- dev
+			}
+		}
+	}()
+
 	return result
 }
