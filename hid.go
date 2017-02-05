@@ -39,7 +39,10 @@ type Device interface {
 	WriteInterrupt(byte, []byte) (int, error)
 
 	// Read the specified report from the device
-	Read(reportNo byte) ([]byte, error)
+	ReadFeature(reportNo byte) ([]byte, error)
+	// Keeps listening for inputs from the device until the stop channel is signaled or closed.
+	// if stop is nil the device keeps listening until the device is closed.
+	Listen(stop <-chan struct{}) (<-chan []byte, <-chan error)
 }
 
 // FindDevices iterates through all devices with a given vendor and product id

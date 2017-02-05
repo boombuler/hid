@@ -15,6 +15,8 @@ static inline CFIndex cfstring_utf8_length(CFStringRef str, CFIndex *need) {
 }
 
 void deviceUnpluged(IOHIDDeviceRef osd, IOReturn ret, void* dev);
+
+void reportCallback(void *context, IOReturn result, void *sender, IOHIDReportType report_type, uint32_t report_id, uint8_t *report, CFIndex report_length);
 */
 import "C"
 
@@ -22,6 +24,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
+	"sync"
 	"unsafe"
 )
 
@@ -132,15 +136,27 @@ func ioReturnToErr(ret C.IOReturn) error {
 	case C.kIOReturnNotFound:
 		return errors.New("data was not found")
 	}
-	return errors.New("Unknown error")
+	return fmt.Errorf("Unknown error: %x", ret)
 }
 
 type cleanupDeviceManagerFn func()
 type osxDevice struct {
-	osDevice     C.IOHIDDeviceRef
-	disconnected bool
-	closeDM      cleanupDeviceManagerFn
+	osDevice           C.IOHIDDeviceRef
+	disconnected       bool
+	closeDM            cleanupDeviceManagerFn
+	reportCallbackKeys []*struct{}
 }
+type reportCallbackContext struct {
+	reports chan<- []byte
+	errors  chan<- error
+	buffer  []byte
+}
+
+var (
+	contextMap   map[*struct{}]*reportCallbackContext
+	contextMutex sync.Mutex
+	runLoop      C.CFRunLoopRef
+)
 
 func cfstring(s string) C.CFStringRef {
 	n := C.CFIndex(len(s))
@@ -282,6 +298,8 @@ func deviceUnpluged(osdev C.IOHIDDeviceRef, result C.IOReturn, dev unsafe.Pointe
 }
 
 func (dev *osxDevice) Close() {
+	dev.removeAllListeners()
+
 	if !dev.disconnected {
 		C.IOHIDDeviceClose(dev.osDevice, C.kIOHIDOptionsTypeSeizeDevice)
 		dev.disconnected = true
@@ -332,7 +350,7 @@ func (dev *osxDevice) getReport(reportNo int32) ([]byte, error) {
 	report := make([]byte, bufSize)
 
 	if !dev.disconnected {
-		res := C.IOHIDDeviceGetReport(dev.osDevice, C.kIOHIDReportTypeInput, C.CFIndex(reportNo), (*C.uint8_t)(&report[0]), &bufSize)
+		res := C.IOHIDDeviceGetReport(dev.osDevice, C.kIOHIDReportTypeFeature, C.CFIndex(reportNo), (*C.uint8_t)(&report[0]), &bufSize)
 		if res == C.kIOReturnSuccess {
 			return report[:bufSize], nil
 		} else {
@@ -343,6 +361,135 @@ func (dev *osxDevice) getReport(reportNo int32) ([]byte, error) {
 	return nil, errors.New("device disconnected")
 }
 
-func (dev *osxDevice) Read(reportNo byte) ([]byte, error) {
+func (dev *osxDevice) ReadFeature(reportNo byte) ([]byte, error) {
 	return dev.getReport(int32(reportNo))
+}
+
+//export reportCallback
+func reportCallback(context unsafe.Pointer, result C.IOReturn, sender unsafe.Pointer, reportType C.IOHIDReportType, reportID uint32, report *C.uint8_t, reportLength C.CFIndex) {
+	key := (*struct{})(context)
+
+	contextMutex.Lock()
+	ctx, ok := contextMap[key]
+	contextMutex.Unlock()
+	if !ok {
+		return
+	}
+
+	data := C.GoBytes(unsafe.Pointer(report), C.int(reportLength))
+	dataNew := make([]byte, len(data))
+	copy(dataNew, data)
+
+	if result == C.kIOReturnSuccess {
+		select {
+		case ctx.reports <- dataNew:
+		default:
+		}
+	} else {
+		select {
+		case ctx.errors <- ioReturnToErr(result):
+		default:
+		}
+	}
+}
+
+func (dev *osxDevice) addListener(key *struct{}, ctx *reportCallbackContext) {
+	bufPtr := (*C.uint8_t)(&ctx.buffer[0])
+	bufSize := C.CFIndex(len(ctx.buffer))
+	callback := (C.IOHIDReportCallback)(unsafe.Pointer(C.reportCallback))
+
+	contextMutex.Lock()
+	if contextMap == nil {
+		contextMap = map[*struct{}]*reportCallbackContext{
+			key: ctx,
+		}
+
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+		go func() {
+			runtime.LockOSThread()
+			runLoop = C.CFRunLoopGetCurrent()
+			C.IOHIDDeviceScheduleWithRunLoop(dev.osDevice, runLoop, C.kCFRunLoopDefaultMode)
+			wg.Done()
+			C.CFRunLoopRun()
+			runLoop = nil
+		}()
+		wg.Wait()
+	} else {
+		contextMap[key] = ctx
+		C.IOHIDDeviceScheduleWithRunLoop(dev.osDevice, runLoop, C.kCFRunLoopDefaultMode)
+
+	}
+	C.IOHIDDeviceRegisterInputReportCallback(dev.osDevice, bufPtr, bufSize, callback, unsafe.Pointer(key))
+
+	contextMutex.Unlock()
+
+	dev.reportCallbackKeys = append(dev.reportCallbackKeys, key)
+}
+
+func (dev *osxDevice) removeListener(key *struct{}) {
+	contextMutex.Lock()
+	defer contextMutex.Unlock()
+
+	if !dev.disconnected {
+		C.IOHIDDeviceRegisterInputReportCallback(dev.osDevice, nil, 0, nil, nil)
+		if runLoop != nil {
+			C.IOHIDDeviceUnscheduleFromRunLoop(dev.osDevice, runLoop, C.kCFRunLoopDefaultMode)
+		}
+	}
+
+	delete(contextMap, key)
+
+	if len(contextMap) == 0 {
+		if runLoop != nil {
+			C.CFRunLoopStop(runLoop)
+			runLoop = nil
+		}
+		contextMap = nil
+	}
+
+	newCap := len(dev.reportCallbackKeys) - 1
+	if newCap > 0 {
+		otherKeys := make([]*struct{}, 0)
+		for _, k := range dev.reportCallbackKeys {
+			if k != key {
+				otherKeys = append(otherKeys, k)
+			}
+		}
+		dev.reportCallbackKeys = otherKeys
+	} else {
+		dev.reportCallbackKeys = nil
+	}
+}
+
+func (dev *osxDevice) removeAllListeners() {
+	if contextMap != nil {
+		for _, key := range dev.reportCallbackKeys {
+			dev.removeListener(key)
+		}
+		dev.reportCallbackKeys = nil
+	}
+}
+
+func (dev *osxDevice) Listen(stop <-chan struct{}) (<-chan []byte, <-chan error) {
+	reports := make(chan []byte, 50)
+	errors := make(chan error)
+
+	bufSize := getIntProp(dev.osDevice, cfstring(C.kIOHIDMaxInputReportSizeKey))
+	buffer := make([]byte, bufSize)
+
+	key := &struct{}{}
+
+	dev.addListener(key, &reportCallbackContext{
+		reports: reports,
+		errors:  errors,
+		buffer:  buffer,
+	})
+
+	go func() {
+		<-stop
+		dev.removeListener(key)
+	}()
+
+	return reports, errors
 }
