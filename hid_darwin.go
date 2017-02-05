@@ -486,10 +486,11 @@ func (dev *osxDevice) Listen(stop <-chan struct{}) (<-chan []byte, <-chan error)
 		buffer:  buffer,
 	})
 
-	go func() {
-		<-stop
-		dev.removeListener(key)
-	}()
-
+	if stop != nil {
+		go func() {
+			<-stop
+			dev.removeListener(key)
+		}()
+	}
 	return reports, errors
 }
