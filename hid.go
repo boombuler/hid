@@ -37,6 +37,9 @@ type Device interface {
 	WriteFeature([]byte) error
 	// Preform an interrupt transfer to the device
 	WriteInterrupt(byte, []byte) (int, error)
+
+	// Read the specified report from the device
+	Read(reportNo byte) ([]byte, error)
 }
 
 // FindDevices iterates through all devices with a given vendor and product id
@@ -59,7 +62,7 @@ func FindDevicesByProduct(product string) <-chan *DeviceInfo {
 
 	go func() {
 		for dev := range Devices() {
-			if strings.Contains(dev.Product, product)  {
+			if strings.Contains(dev.Product, product) {
 				result <- dev
 			}
 		}

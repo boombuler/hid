@@ -326,3 +326,23 @@ func (dev *osxDevice) Write(data []byte) error {
 func (dev *osxDevice) WriteInterrupt(endpoint byte, data []byte) (int, error) {
 	return 0, errors.New("WriteInterrupt is not implemented")
 }
+
+func (dev *osxDevice) getReport(reportNo int32) ([]byte, error) {
+	var bufSize C.CFIndex = (C.CFIndex)(getIntProp(dev.osDevice, cfstring(C.kIOHIDMaxInputReportSizeKey)))
+	report := make([]byte, bufSize)
+
+	if !dev.disconnected {
+		res := C.IOHIDDeviceGetReport(dev.osDevice, C.kIOHIDReportTypeInput, C.CFIndex(reportNo), (*C.uint8_t)(&report[0]), &bufSize)
+		if res == C.kIOReturnSuccess {
+			return report[:bufSize], nil
+		} else {
+			return nil, ioReturnToErr(res)
+		}
+	}
+
+	return nil, errors.New("device disconnected")
+}
+
+func (dev *osxDevice) Read(reportNo byte) ([]byte, error) {
+	return dev.getReport(int32(reportNo))
+}
