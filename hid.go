@@ -59,10 +59,11 @@ func FindDevicesByProduct(product string) <-chan *DeviceInfo {
 
 	go func() {
 		for dev := range Devices() {
-			if strings.Contains(dev.Product, product)  {
+			if strings.Contains(dev.Product, product) {
 				result <- dev
 			}
 		}
+		close(result)
 	}()
 
 	return result
