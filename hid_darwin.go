@@ -144,11 +144,11 @@ type osxDevice struct {
 
 func cfstring(s string) C.CFStringRef {
 	n := C.CFIndex(len(s))
-	return C.CFStringCreateWithBytes(nil, *(**C.UInt8)(unsafe.Pointer(&s)), n, C.kCFStringEncodingUTF8, 0)
+	return C.CFStringCreateWithBytes(0, *(**C.UInt8)(unsafe.Pointer(&s)), n, C.kCFStringEncodingUTF8, 0)
 }
 
 func gostring(cfs C.CFStringRef) string {
-	if cfs == nil {
+	if cfs == 0 {
 		return ""
 	}
 
@@ -174,7 +174,7 @@ func getIntProp(device C.IOHIDDeviceRef, key C.CFStringRef) int32 {
 	var value int32
 
 	ref := C.IOHIDDeviceGetProperty(device, key)
-	if ref != nil {
+	if ref != 0 {
 		if C.CFGetTypeID(ref) == C.CFNumberGetTypeID() {
 			C.CFNumberGetValue(C.CFNumberRef(ref), C.kCFNumberSInt32Type, unsafe.Pointer(&value))
 			return value
@@ -198,7 +198,7 @@ func getPath(osDev C.IOHIDDeviceRef) string {
 
 func iterateDevices(action func(device C.IOHIDDeviceRef) bool) cleanupDeviceManagerFn {
 	mgr := C.IOHIDManagerCreate(C.kCFAllocatorDefault, C.kIOHIDOptionsTypeNone)
-	C.IOHIDManagerSetDeviceMatching(mgr, nil)
+	C.IOHIDManagerSetDeviceMatching(mgr, 0)
 	C.IOHIDManagerOpen(mgr, C.kIOHIDOptionsTypeNone)
 
 	allDevicesSet := C.IOHIDManagerCopyDevices(mgr)
@@ -286,9 +286,9 @@ func (dev *osxDevice) Close() {
 		C.IOHIDDeviceClose(dev.osDevice, C.kIOHIDOptionsTypeSeizeDevice)
 		dev.disconnected = true
 	}
-	if dev.osDevice != nil {
+	if dev.osDevice != 0 {
 		C.CFRelease(C.CFTypeRef(dev.osDevice))
-		dev.osDevice = nil
+		dev.osDevice = 0
 	}
 	if dev.closeDM != nil {
 		dev.closeDM()
