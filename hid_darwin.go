@@ -1,7 +1,7 @@
 package hid
 
 /*
-#cgo LDFLAGS: -L . -L/usr/local/lib -framework CoreFoundation -framework IOKit -fconstant-cfstrings
+#cgo LDFLAGS: -L . -L/usr/local/lib -framework CoreFoundation -framework IOKit
 
 #include <IOKit/hid/IOHIDManager.h>
 #include <CoreFoundation/CoreFoundation.h>
