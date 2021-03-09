@@ -71,7 +71,7 @@ func (d *winDevice) WriteFeature(data []byte) error {
 	buffer := make([]byte, d.info.FeatureReportLength, d.info.FeatureReportLength)
 	copy(buffer, data)
 
-	if C.HidD_SetFeature(d.h(), unsafe.Pointer(&buffer[0]), C.DWORD(len(buffer))) != 0 {
+	if C.HidD_SetFeature(d.h(), C.PVOID(&buffer[0]), C.DWORD(len(buffer))) != 0 {
 		return nil
 	} else {
 		return syscall.GetLastError()
