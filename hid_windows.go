@@ -39,6 +39,32 @@ func (d *winDevice) Close() {
 	d.handle = syscall.InvalidHandle
 }
 
+func (d *winDevice) Read() ([]byte, error) {
+	inSize := int(d.info.InputReportLength)
+	buffer := make([]byte, inSize, inSize)
+
+	ol := new(syscall.Overlapped)
+	if err := syscall.ReadFile(d.handle, buffer, nil, ol); err != nil {
+		// IO Pending is ok we simply wait for it to finish a few lines below
+		// all other errors should be reported.
+		if err != syscall.ERROR_IO_PENDING {
+			return nil, err
+		}
+	}
+
+	// now wait for the overlapped device access to finish.
+	var read C.DWORD
+	if C.GetOverlappedResult(d.h(), (*C.OVERLAPPED)((unsafe.Pointer)(ol)), &read, C.TRUE) == 0 {
+		return nil, syscall.GetLastError()
+	}
+
+	if int(read) != inSize {
+		return nil, errors.New("read bytes mismatch!")
+	}
+
+	return buffer, nil
+}
+
 func (d *winDevice) Write(data []byte) error {
 	// first make sure we send the correct amount of data to the device
 	outSize := int(d.info.OutputReportLength)
@@ -61,7 +87,7 @@ func (d *winDevice) Write(data []byte) error {
 	}
 
 	if int(written) != outSize {
-		return errors.New("written bytes missmatch!")
+		return errors.New("written bytes mismatch!")
 	}
 	return nil
 }

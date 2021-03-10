@@ -319,6 +319,10 @@ func (dev *osxDevice) WriteFeature(data []byte) error {
 	return dev.setReport(C.kIOHIDReportTypeFeature, data)
 }
 
+func (d *osxDevice) Read() ([]byte, error) {
+	return nil, errors.New("Read is not implemented")
+}
+
 func (dev *osxDevice) Write(data []byte) error {
 	return dev.setReport(C.kIOHIDReportTypeOutput, data)
 }

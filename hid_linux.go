@@ -151,6 +151,10 @@ func (dev *linuxDevice) WriteFeature(data []byte) error {
 	return dev.writeReport(HID_REPORT_TYPE_FEATURE, data)
 }
 
+func (d *linuxDevice) Read() ([]byte, error) {
+	return nil, errors.New("Read is not implemented")
+}
+
 func (dev *linuxDevice) Write(data []byte) error {
 	return dev.writeReport(HID_REPORT_TYPE_OUTPUT, data)
 }
